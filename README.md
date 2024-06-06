@@ -17,7 +17,7 @@ pip install -r requirements.txt
 Usage Instructions
 Clone this repository:
 ```
-git clone https://github.com/your_username/changeseq-snakemake.git
+git clone https://github.com/Liozhang/changeseq-snakemake.git
 cd changeseq-snakemake
 ```
 Prepare your input data:
