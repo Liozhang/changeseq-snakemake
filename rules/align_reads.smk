@@ -1,86 +1,68 @@
-rule all:
-    input:
-        "sorted.bam"
 
-rule check_genome_index:
+rule build_genome_index:
+    input:
+        ref_genome = ""
     output:
-        touch("genome_indexed.txt")
+        pac = "ref_genome.pac",
+        amb = "ref_genome.amb",
+        ann = "ref_genome.ann",
+        bwt = "ref_genome.bwt",
+        sa = "ref_genome.sa"
+    params:
+        bwa = "",
+    threads: 2
     shell:
         """
-        BWA_path={BWA_path}
-        HG19_path={HG19_path}
-        index_files_extensions=".pac .amb .ann .bwt .sa"
-        genome_indexed=True
-        for extension in $index_files_extensions
-        do
+        for extension in .pac .amb .ann .bwt .sa; do
             if [ ! -f $HG19_path$extension ]; then
                 genome_indexed=False
                 break
             fi
         done
+
         if [ "$genome_indexed" = False ]; then
             echo 'Genome index files not detected. Running BWA to generate indices.'
-            bwa_index_command="$BWA_path index $HG19_path"
-            echo 'Running bwa command: $bwa_index_command'
-            $bwa_index_command
+            {params.bwa} index {input.ref_genome}
             echo 'BWA genome index generated'
         else
             echo 'BWA genome index found.'
         fi
         """
 
+
 rule align_reads:
     input:
-        "genome_indexed.txt",
-        "read1.fastq",
-        "read2.fastq"
+        fq1 = "read1.fastq",
+        fq2 = "read2.fastq",
+        pac = "ref_genome.pac",
+        amb = "ref_genome.amb",
+        ann = "ref_genome.ann",
+        bwt = "ref_genome.bwt",
+        sa = "ref_genome.sa"
     output:
-        "aligned.sam"
+        bam = "aligned.bam"
+    params:
+        bwa = "",
+        index = "ref_genome"
+    threads: 5
     shell:
         """
-        BWA_path={BWA_path}
-        HG19_path={HG19_path}
-        bwa_alignment_command="$BWA_path mem $HG19_path {input[1]} {input[2]} > {output}"
-        echo $bwa_alignment_command
-        $bwa_alignment_command
+        set -eux
+        {params.bwa} mem -t {threads} {input.index} {input.fq1} {input.fq2} | samtools view -bS - > {output.bam}
         echo 'Paired end mapping completed.'
         """
 
-rule sam_to_bam:
-    input:
-        "aligned.sam"
-    output:
-        "aligned.bam"
-    shell:
-        """
-        samtools_sam_to_bam_command="samtools sort -o {output} {input}"
-        echo $samtools_sam_to_bam_command
-        $samtools_sam_to_bam_command
-        echo 'Sorting by coordinate position complete.'
-        """
-
-rule index_bam:
-    input:
-        "aligned.bam"
-    output:
-        "aligned.bam.bai"
-    shell:
-        """
-        samtools_index_command="samtools index {input}"
-        echo $samtools_index_command
-        $samtools_index_command
-        echo 'Indexing complete.'
-        """
 
 rule sort_bam:
     input:
-        "aligned.bam"
+        bam = "aligned.bam"
     output:
-        "sorted.bam"
+        sort_bam = "sorted.bam"
+    threads: 5
     shell:
         """
-        samtools_sort_by_name_command="samtools sort -o {output} -n {input}"
-        echo $samtools_sort_by_name_command
-        $samtools_sort_by_name_command
-        echo 'Sorting by name complete.'
+        set -eux
+        samtools sort -@ {threads} -o {output.sort_bam} {input.bam}
+        samtools index {output.sort_bam}
+        echo 'Sorting by coordinate position complete.'
         """
